@@ -1,0 +1,261 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="theme-color" content="#000000">
+<title>Fer Games: Ajedrez Pro</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' rx='20' fill='%23222'/%3E%3Crect x='50' width='50' height='50' fill='%23444'/%3E%3Crect y='50' width='50' height='50' fill='%23444'/%3E%3Ctext x='50' y='76' font-size='70' text-anchor='middle' fill='%23fff'%3E%E2%99%9E%3C/text%3E%3C/svg%3E">
+<link rel="apple-touch-icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' fill='%23222'/%3E%3Ctext x='50' y='76' font-size='70' text-anchor='middle' fill='%23fff'%3E%E2%99%9E%3C/text%3E%3C/svg%3E">
+<style>
+*{box-sizing:border-box;margin:0;padding:0;user-select:none;-webkit-tap-highlight-color:transparent;touch-action:manipulation}
+body{background:#111;color:#fff;font-family:'Courier New',Courier,monospace;display:flex;justify-content:center;align-items:center;height:100vh;height:100dvh;overflow:auto}
+#game-container{width:100%;max-width:450px;background:#1a1a1a;border:2px solid #333;padding:15px;display:flex;flex-direction:column;align-items:center;gap:12px;position:relative;margin:auto}
+header{text-align:center;width:100%}
+h1{font-size:1.2rem;letter-spacing:2px;margin-bottom:5px}
+#turno-info{font-size:.9rem;color:#4CAF50;font-weight:bold}
+#board{display:grid;grid-template-columns:repeat(8,1fr);grid-template-rows:repeat(8,1fr);width:min(100%,calc(100dvh - 270px));min-width:240px;aspect-ratio:1/1;border:4px solid #000;background:#000}
+.square{display:flex;justify-content:center;align-items:center;font-size:2.2rem;cursor:pointer;position:relative;line-height:1}
+.light{background:#6b6b6b}.dark{background:#333}
+.pb{color:#f5f5f5;text-shadow:0 0 2px #000,0 0 1px #000}
+.pn{color:#000;text-shadow:0 0 3px #bbb,0 0 1px #bbb}
+.selected{background:#2e5c2e !important}
+.ultimo{box-shadow:inset 0 0 0 3px rgba(255,235,59,.5)}
+.valid-dest::after{content:'';width:12px;height:12px;background:rgba(76,175,80,.8);border-radius:50%;position:absolute;z-index:2}
+.valid-dest.captura::after{width:100%;height:100%;background:transparent;border:3px solid rgba(255,85,85,.8);border-radius:0}
+.captured-container{display:flex;justify-content:space-between;width:100%;background:#000;padding:6px 10px;border:1px solid #333;font-size:1.1rem;min-height:35px;align-items:center;gap:8px}
+.captured-container>div:first-child{color:#888;font-size:.7rem}
+.captured-list{display:flex;flex-wrap:wrap;gap:3px;justify-content:flex-end}
+button{background:#333;color:#fff;border:1px solid #555;padding:8px 16px;cursor:pointer;font-family:inherit;font-size:.9rem;width:100%}
+button:active{background:#555}
+#mode-screen{position:absolute;inset:0;background:rgba(17,17,17,.95);display:flex;justify-content:center;align-items:center;z-index:10}
+#mode-screen.hidden{display:none}
+.mode-content{background:#222;padding:25px;border:2px solid #555;text-align:center;width:85%}
+.mode-content h2{font-size:1.3rem;margin-bottom:20px;letter-spacing:1px}
+.btn-mode{margin-bottom:12px;padding:12px;font-size:1rem}
+@media(max-width:400px){.square{font-size:1.8rem}}
+</style>
+</head>
+<body>
+<div id="game-container">
+  <div id="mode-screen">
+    <div class="mode-content">
+      <h2>♞ SELECCIONA MODO</h2>
+      <button class="btn-mode" onclick="seleccionarModo('local')">👥 2 JUGADORES (Local)</button>
+      <button class="btn-mode" onclick="seleccionarModo('bot')">🤖 VS BOT (Negras)</button>
+    </div>
+  </div>
+  <header>
+    <h1>RETRO CHESS PRO</h1>
+    <div id="turno-info">Turno: Blancas</div>
+  </header>
+  <div class="captured-container"><div>Capturadas por negras:</div><div id="capturadas-blancas" class="captured-list"></div></div>
+  <div id="board"></div>
+  <div class="captured-container"><div>Capturadas por blancas:</div><div id="capturadas-negras" class="captured-list"></div></div>
+  <button onclick="volverAlMenu()">CAMBIAR MODO / REINICIAR</button>
+</div>
+
+<script>
+const tiposPiezas = {'♙':'pawn','♖':'rook','♘':'knight','♗':'bishop','♕':'queen','♔':'king','♟':'pawn','♜':'rook','♞':'knight','♝':'bishop','♛':'queen','♚':'king'};
+const BLANCAS = '♙♖♘♗♕♔';
+const glifo = {pawn:'♟',rook:'♜',knight:'♞',bishop:'♝',queen:'♛',king:'♚'};
+const valores = {pawn:10,knight:30,bishop:30,rook:50,queen:90,king:1000};
+
+const tableroInicial = [
+  ['♜','♞','♝','♛','♚','♝','♞','♜'],
+  ['♟','♟','♟','♟','♟','♟','♟','♟'],
+  ['','','','','','','',''],['','','','','','','',''],['','','','','','','',''],['','','','','','','',''],
+  ['♙','♙','♙','♙','♙','♙','♙','♙'],
+  ['♖','♘','♗','♕','♔','♗','♘','♖']
+];
+
+let boardState = JSON.parse(JSON.stringify(tableroInicial));
+let gameMode = 'local', turnoActual = 'blancas', casillaSeleccionada = null, movimientosValidosActuales = [];
+let capturadasBlancas = [], capturadasNegras = [], ultimoMov = null, botTimer = null, terminado = false;
+const boardElement = document.getElementById('board');
+
+const colorDe = p => !p ? null : (BLANCAS.includes(p) ? 'blancas' : 'negras');
+const tipoDe = p => tiposPiezas[p] || null;
+const enemigo = c => c === 'blancas' ? 'negras' : 'blancas';
+const html = p => `<span class="${colorDe(p) === 'blancas' ? 'pb' : 'pn'}">${glifo[tipoDe(p)]}\uFE0E</span>`;
+
+function seleccionarModo(m) {
+  gameMode = m;
+  document.getElementById('mode-screen').classList.add('hidden');
+  reiniciarJuego();
+}
+function volverAlMenu() {
+  clearTimeout(botTimer);
+  document.getElementById('mode-screen').classList.remove('hidden');
+}
+
+// --- Movimientos (sin considerar jaque) ---
+function movimientosPseudo(r, c) {
+  const moves = [], pieza = boardState[r][c], color = colorDe(pieza), tipo = tipoDe(pieza);
+  if (!tipo) return moves;
+  const dentro = (a, b) => a >= 0 && a < 8 && b >= 0 && b < 8;
+  const libreOEnemigo = (a, b) => !boardState[a][b] || colorDe(boardState[a][b]) !== color;
+
+  if (tipo === 'pawn') {
+    const dir = color === 'blancas' ? -1 : 1, inicio = color === 'blancas' ? 6 : 1;
+    if (dentro(r + dir, c) && !boardState[r + dir][c]) {
+      moves.push({ r: r + dir, c });
+      if (r === inicio && !boardState[r + 2 * dir][c]) moves.push({ r: r + 2 * dir, c });
+    }
+    [c - 1, c + 1].forEach(dc => {
+      if (dentro(r + dir, dc) && boardState[r + dir][dc] && colorDe(boardState[r + dir][dc]) !== color)
+        moves.push({ r: r + dir, c: dc });
+    });
+  }
+  if (tipo === 'knight') {
+    [[-2,-1],[-2,1],[-1,-2],[-1,2],[1,-2],[1,2],[2,-1],[2,1]].forEach(([dr, dc]) => {
+      if (dentro(r + dr, c + dc) && libreOEnemigo(r + dr, c + dc)) moves.push({ r: r + dr, c: c + dc });
+    });
+  }
+  if (tipo === 'king') {
+    for (let dr = -1; dr <= 1; dr++) for (let dc = -1; dc <= 1; dc++)
+      if ((dr || dc) && dentro(r + dr, c + dc) && libreOEnemigo(r + dr, c + dc)) moves.push({ r: r + dr, c: c + dc });
+  }
+  const dirs = [];
+  if (tipo === 'bishop' || tipo === 'queen') dirs.push([-1,-1],[-1,1],[1,-1],[1,1]);
+  if (tipo === 'rook' || tipo === 'queen') dirs.push([-1,0],[1,0],[0,-1],[0,1]);
+  dirs.forEach(([dr, dc]) => {
+    let nr = r + dr, nc = c + dc;
+    while (dentro(nr, nc)) {
+      if (!boardState[nr][nc]) moves.push({ r: nr, c: nc });
+      else { if (colorDe(boardState[nr][nc]) !== color) moves.push({ r: nr, c: nc }); break; }
+      nr += dr; nc += dc;
+    }
+  });
+  return moves;
+}
+
+// --- Jaque y movimientos legales ---
+function casillaAtacada(r, c, porColor) {
+  for (let i = 0; i < 8; i++) for (let j = 0; j < 8; j++)
+    if (colorDe(boardState[i][j]) === porColor && movimientosPseudo(i, j).some(m => m.r === r && m.c === c)) return true;
+  return false;
+}
+function reyEnJaque(color) {
+  for (let i = 0; i < 8; i++) for (let j = 0; j < 8; j++)
+    if (tipoDe(boardState[i][j]) === 'king' && colorDe(boardState[i][j]) === color)
+      return casillaAtacada(i, j, enemigo(color));
+  return false;
+}
+function movimientosLegales(r, c) {
+  const color = colorDe(boardState[r][c]);
+  return movimientosPseudo(r, c).filter(m => {
+    const origen = boardState[r][c], destino = boardState[m.r][m.c];
+    boardState[m.r][m.c] = origen; boardState[r][c] = '';
+    const jaque = reyEnJaque(color);
+    boardState[r][c] = origen; boardState[m.r][m.c] = destino;
+    return !jaque;
+  });
+}
+function hayMovimientos(color) {
+  for (let i = 0; i < 8; i++) for (let j = 0; j < 8; j++)
+    if (colorDe(boardState[i][j]) === color && movimientosLegales(i, j).length) return true;
+  return false;
+}
+
+// --- Render ---
+function renderTablero() {
+  boardElement.innerHTML = '';
+  for (let r = 0; r < 8; r++) for (let c = 0; c < 8; c++) {
+    const sq = document.createElement('div');
+    sq.className = `square ${(r + c) % 2 === 0 ? 'light' : 'dark'}`;
+    if (boardState[r][c]) sq.innerHTML = html(boardState[r][c]);
+    if (casillaSeleccionada && casillaSeleccionada.row === r && casillaSeleccionada.col === c) sq.classList.add('selected');
+    if (ultimoMov && ((ultimoMov.r1 === r && ultimoMov.c1 === c) || (ultimoMov.r2 === r && ultimoMov.c2 === c))) sq.classList.add('ultimo');
+    if (movimientosValidosActuales.some(m => m.r === r && m.c === c)) {
+      sq.classList.add('valid-dest');
+      if (boardState[r][c]) sq.classList.add('captura');
+    }
+    sq.onclick = () => manejarClickCasilla(r, c);
+    boardElement.appendChild(sq);
+  }
+  actualizarUI();
+}
+
+function manejarClickCasilla(row, col) {
+  if (terminado || (gameMode === 'bot' && turnoActual === 'negras')) return;
+  const p = boardState[row][col];
+  if (casillaSeleccionada && movimientosValidosActuales.some(m => m.r === row && m.c === col)) {
+    ejecutarMovimiento(casillaSeleccionada.row, casillaSeleccionada.col, row, col);
+  } else if (p && colorDe(p) === turnoActual) {
+    casillaSeleccionada = { row, col };
+    movimientosValidosActuales = movimientosLegales(row, col);
+    renderTablero();
+  } else {
+    casillaSeleccionada = null; movimientosValidosActuales = [];
+    renderTablero();
+  }
+}
+
+function ejecutarMovimiento(r1, c1, r2, c2) {
+  const pieza = boardState[r1][c1], destino = boardState[r2][c2];
+  if (destino) (colorDe(destino) === 'blancas' ? capturadasBlancas : capturadasNegras).push(destino);
+
+  boardState[r2][c2] = pieza;
+  boardState[r1][c1] = '';
+  if (tipoDe(pieza) === 'pawn' && (r2 === 0 || r2 === 7))
+    boardState[r2][c2] = colorDe(pieza) === 'blancas' ? '♕' : '♛';
+
+  ultimoMov = { r1, c1, r2, c2 };
+  casillaSeleccionada = null; movimientosValidosActuales = [];
+  turnoActual = enemigo(turnoActual);
+  renderTablero();
+
+  if (!hayMovimientos(turnoActual)) {
+    terminado = true;
+    const msg = reyEnJaque(turnoActual)
+      ? `♚ ¡JAQUE MATE! Ganan las ${enemigo(turnoActual)}.`
+      : '🤝 ¡Tablas! Rey ahogado: no hay movimientos legales.';
+    setTimeout(() => { alert(msg); reiniciarJuego(); }, 50);
+    return;
+  }
+  if (gameMode === 'bot' && turnoActual === 'negras') botTimer = setTimeout(ejecutarTurnoBot, 600);
+}
+
+// --- Bot ---
+function ejecutarTurnoBot() {
+  if (terminado || turnoActual !== 'negras') return;
+  const candidatos = [];
+  for (let r = 0; r < 8; r++) for (let c = 0; c < 8; c++) {
+    if (colorDe(boardState[r][c]) !== 'negras') continue;
+    movimientosLegales(r, c).forEach(m => {
+      const origen = boardState[r][c], destino = boardState[m.r][m.c];
+      let puntaje = destino ? valores[tipoDe(destino)] : 0;
+      boardState[m.r][m.c] = origen; boardState[r][c] = '';
+      if (casillaAtacada(m.r, m.c, 'blancas')) puntaje -= valores[tipoDe(origen)] * 0.9;
+      if (reyEnJaque('blancas')) puntaje += hayMovimientos('blancas') ? 5 : 10000;
+      boardState[r][c] = origen; boardState[m.r][m.c] = destino;
+      candidatos.push({ r, c, m, puntaje: puntaje + Math.random() });
+    });
+  }
+  candidatos.sort((a, b) => b.puntaje - a.puntaje);
+  const e = candidatos[0];
+  ejecutarMovimiento(e.r, e.c, e.m.r, e.m.c);
+}
+
+function actualizarUI() {
+  const t = document.getElementById('turno-info');
+  const jaque = reyEnJaque(turnoActual) ? ' ¡JAQUE!' : '';
+  if (turnoActual === 'blancas') { t.innerText = 'Turno: Blancas' + jaque; t.style.color = '#4CAF50'; }
+  else { t.innerText = (gameMode === 'bot' ? 'Turno: Bot pensando... 🤖' : 'Turno: Negras') + jaque; t.style.color = '#ff5555'; }
+  document.getElementById('capturadas-blancas').innerHTML = capturadasBlancas.map(html).join('');
+  document.getElementById('capturadas-negras').innerHTML = capturadasNegras.map(html).join('');
+}
+
+function reiniciarJuego() {
+  clearTimeout(botTimer);
+  boardState = JSON.parse(JSON.stringify(tableroInicial));
+  turnoActual = 'blancas'; casillaSeleccionada = null; movimientosValidosActuales = [];
+  capturadasBlancas = []; capturadasNegras = []; ultimoMov = null; terminado = false;
+  renderTablero();
+}
+
+renderTablero();
+</script>
+</body>
+</html>
